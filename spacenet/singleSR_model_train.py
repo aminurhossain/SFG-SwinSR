@@ -34,11 +34,9 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA_ROOT = os.path.join(PROJECT_ROOT, "data")
 OUTPUTS_ROOT = os.path.join(PROJECT_ROOT, "outputs")
 
-# LR_DIR = os.path.join(DATA_ROOT, "train_lr")
-LR_DIR="/hrnas_user/users/aminur/tdp/Super-Resulution/data/singlesr/train_lr_clean"
-HR_DIR="/hrnas_user/users/aminur/tdp/Super-Resulution/data/singlesr/train_hr_clean"
+LR_DIR = "path/to/your/train_lr_dir"
+HR_DIR = "path/to/your/train_hr_dir"
 
-# HR_DIR = os.path.join(DATA_ROOT, "train_hr")
 SAVE_DIR = os.path.join(OUTPUTS_ROOT, "checkpoints", "SFG_swinSR_test")
 os.makedirs(SAVE_DIR, exist_ok=True)
 

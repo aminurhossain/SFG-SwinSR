@@ -7,4 +7,3 @@ scikit-image
 PyYAML
 tqdm
 affine
-setproctitle

@@ -39,6 +39,7 @@ This repository contains:
 
 - the released model implementation in `model.py`
 - training and evaluation scripts under `spacenet/`
+- training and evaluation scripts under `sen2venμs/`
 - ablation utilities under `ablations/`
 - release-safe README assets under `docs/images/`
 - placeholders for paper and Hugging Face resource links in the header badges
@@ -115,6 +116,11 @@ SFG-SwinSR/
 |   |-- config.yml
 |   |-- config.json
 |   `-- info.txt
+|-- sen2venμs/
+|   |-- train.py
+|   |-- evaluation.py
+|   |-- config.yml
+|   `-- info.txt
 `-- ablations/
     |-- ablation_runner.py
     `-- info.txt
@@ -131,6 +137,11 @@ Dataset paths, scale settings, crop sizes, and normalization statistics are defi
 
 - `spacenet/config.yml`
 - `spacenet/config.json`
+- `sen2venμs/config.yml`
+
+Standalone local path constants are also kept as placeholders in:
+
+- `spacenet/singleSR_model_train.py`
 
 Update those paths and values for your local environment before running experiments.
 
@@ -174,7 +185,11 @@ The scripts depend mainly on:
 - PyYAML
 - tqdm
 
-Install these packages in your environment before running the training or evaluation scripts.
+Install these packages before running the training or evaluation scripts:
+
+```bash
+pip install -r requirements.txt
+```
 
 ## Release Notes
 
@@ -188,7 +203,7 @@ If you use this repository, cite the corresponding paper:
 ```bibtex
 @article{hossain2026sfgswinsr,
   title={Spatial-Frequency Gated Swin Transformer for Remote Sensing Single-Image Super-Resolution},
-  author={Hossain, Md Aminur and others},
+  author={Hossain, Md Aminur and Valkesh, Parekh and Patel, Ayush V. and Jethani, Yogesh and Singh, Sanjay K. and Banerjee, Biplab},
   year={2026}
 }
 ```

@@ -10,8 +10,6 @@ import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
-import setproctitle
-setproctitle.setproctitle('train_model.py')
 
 from model import MAGSwin2SR
 from evaluation import (
