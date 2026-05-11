@@ -2,6 +2,7 @@ import argparse
 import csv
 import json
 import re
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -15,7 +16,11 @@ from torch.utils.data import DataLoader, Dataset
 from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
 from tqdm import tqdm
 
-from model import MAGSwin2SR
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from SFGSwinSR import MAGSwin2SR
 
 DEFAULT_LR_DIR = "path/to/your/lr_dir"
 DEFAULT_HR_DIR = "path/to/your/hr_dir"

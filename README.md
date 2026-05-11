@@ -37,8 +37,8 @@ SFG-SwinSR is a Swin2SR-based super-resolution model for remote sensing imagery.
 
 This repository contains:
 
-- the released model implementation in `model.py`
-- training and evaluation scripts under `spacenet/`
+- the released model implementation in `SFGSwinSR.py`
+- SpaceNet baseline Swin2SR training and evaluation scripts under `spacenet/`
 - training and evaluation scripts under `sen2venμs/`
 - ablation utilities under `ablations/`
 - release-safe README assets under `docs/images/`
@@ -104,7 +104,7 @@ Visual comparison on SEN2VENuS. The paper reports improved boundary recovery, fi
 
 ```text
 SFG-SwinSR/
-|-- model.py
+|-- SFGSwinSR.py
 |-- README.md
 |-- .gitignore
 |-- docs/
@@ -147,7 +147,7 @@ Update those paths and values for your local environment before running experime
 
 ## Main Files
 
-### `model.py`
+### `SFGSwinSR.py`
 
 Contains:
 
@@ -157,7 +157,7 @@ Contains:
 
 ### `spacenet/train.py`
 
-Configuration-driven training entrypoint.
+Configuration-driven training entrypoint for the baseline `Swin2SR` model on SpaceNet.
 
 ### `spacenet/evaluation.py`
 
@@ -165,11 +165,57 @@ Evaluation script for metrics and super-resolved image export.
 
 ### `spacenet/singleSR_model_train.py`
 
-Standalone training script with directly embedded local constants.
+Training script for the proposed `MAGSwin2SR` / `SFG-SwinSR` model with directly embedded local constants.
 
 ### `ablations/ablation_runner.py`
 
 Runner for backbone and loss ablation experiments.
+
+## Training and Evaluation
+
+### SpaceNet
+
+Train baseline Swin2SR:
+
+```bash
+python spacenet/train.py --config spacenet/config.yml
+```
+
+Evaluate:
+
+```bash
+python spacenet/evaluation.py \
+  --model-type mag \
+  --checkpoint path/to/your/checkpoint.pt \
+  --lr-dir path/to/your/lr_dir \
+  --hr-dir path/to/your/hr_dir \
+  --output-dir path/to/your/output_dir
+```
+
+Train proposed SFG-SwinSR / MAGSwin2SR:
+
+```bash
+python spacenet/singleSR_model_train.py
+```
+
+### SEN2VENuS
+
+Train:
+
+```bash
+python "sen2venμs/train.py" --config "sen2venμs/config.yml"
+```
+
+Evaluate:
+
+```bash
+python "sen2venμs/evaluation.py" \
+  --model-type mag \
+  --checkpoint path/to/your/checkpoint.pt \
+  --lr-dir path/to/your/lr_dir \
+  --hr-dir path/to/your/hr_dir \
+  --output-dir path/to/your/output_dir
+```
 
 ## Environment
 

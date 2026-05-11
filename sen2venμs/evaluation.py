@@ -4,6 +4,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -16,17 +17,37 @@ from affine import Affine
 from skimage.metrics import peak_signal_noise_ratio as psnr_metric
 from skimage.metrics import structural_similarity as ssim_metric
 from torch.utils.data import DataLoader, Dataset
+from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
 from tqdm import tqdm
 
-try:
-    from .model import MAGSwin2SR
-except ImportError:
-    from model import MAGSwin2SR
-
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from SFGSwinSR import MAGSwin2SR
+
 CURRENT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = CURRENT_DIR / "config.yml"
 VALID_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+
+
+class StandardSwin2SR(torch.nn.Module):
+    def __init__(self, model_config, scale, img_size, num_channels):
+        super().__init__()
+        config = Swin2SRConfig(
+            num_channels=num_channels,
+            upscale=scale,
+            img_size=img_size,
+            window_size=model_config.get("window_size", 8),
+            depths=model_config.get("depths", [6, 6, 6, 6, 6, 6]),
+            num_heads=model_config.get("num_heads", [6, 6, 6, 6, 6, 6]),
+            embed_dim=model_config.get("embed_dim", 180),
+            mlp_ratio=model_config.get("mlp_ratio", 2.0),
+        )
+        self.swin2sr = Swin2SRForImageSuperResolution(config)
+
+    def forward(self, pixel_values):
+        return self.swin2sr(pixel_values=pixel_values).reconstruction
 
 
 def load_config(path):
@@ -37,6 +58,7 @@ def load_config(path):
 def build_parser():
     parser = argparse.ArgumentParser(description="Evaluate standalone SingleSR Sen2Venus checkpoints.")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
+    parser.add_argument("--model-type", "--model_type", dest="model_type", choices=("standard", "mag"), default="standard")
     parser.add_argument("--dataset-profile", "--dataset_profile", dest="dataset_profile", default=None)
     parser.add_argument("--lr-dir", "--lr_dir", dest="lr_dir", default=None)
     parser.add_argument("--hr-dir", "--hr_dir", dest="hr_dir", default=None)
@@ -72,9 +94,10 @@ def resolve_args():
     if args.hr_dir is None and not args.no_hr:
         args.hr_dir = str(PROJECT_ROOT / dataset_root / profile_cfg["hr_subdir"])
     if args.checkpoint is None:
-        args.checkpoint = str(PROJECT_ROOT / profile_cfg["save_dir"] / "best_SFG_swinSR.pt")
+        default_checkpoint_name = "best_SFG_swinSR.pt" if args.model_type == "mag" else "best_Swin2SR.pt"
+        args.checkpoint = str(PROJECT_ROOT / profile_cfg["save_dir"] / default_checkpoint_name)
     if args.output_dir is None:
-        args.output_dir = str(PROJECT_ROOT / "outputs" / "evaluation" / f"SFG_inference_2x_{profile_name}")
+        args.output_dir = str(PROJECT_ROOT / "outputs" / "evaluation" / f"{args.model_type}_inference_{profile_name}")
 
     args.dataset_profile = profile_name
     args.scale = int(profile_cfg["scale"])
@@ -254,10 +277,18 @@ def compute_mae(sr, hr):
 
 def build_model(args, device):
     model_kwargs = dict(args.model_config)
-    model_kwargs["img_size"] = args.lr_crop_size
-    model_kwargs["upscale"] = args.scale
-    model_kwargs["num_channels"] = args.num_channels
-    model = MAGSwin2SR(**model_kwargs).to(device)
+    if args.model_type == "mag":
+        model_kwargs["img_size"] = args.lr_crop_size
+        model_kwargs["upscale"] = args.scale
+        model_kwargs["num_channels"] = args.num_channels
+        model = MAGSwin2SR(**model_kwargs).to(device)
+    else:
+        model = StandardSwin2SR(
+            model_config=model_kwargs,
+            scale=args.scale,
+            img_size=args.lr_crop_size,
+            num_channels=args.num_channels,
+        ).to(device)
     checkpoint = torch.load(args.checkpoint, map_location=device)
     state_dict = checkpoint.get("model_state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
     model.load_state_dict(state_dict)
@@ -318,6 +349,7 @@ def main():
     device = torch.device(args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu"))
     print(f"Using device: {device}")
     print(f"Dataset profile: {args.dataset_profile}")
+    print(f"Model type: {args.model_type}")
     print(f"Checkpoint: {args.checkpoint}")
     print(f"Metric backend: {args.metric_backend}")
 

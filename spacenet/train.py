@@ -1,7 +1,9 @@
 import argparse
 import os
 import random
+import sys
 from math import log10
+from pathlib import Path
 
 import kornia
 import numpy as np
@@ -16,13 +18,13 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader, Dataset, random_split
 from tqdm import tqdm
 
-try:
-    from .model import MAGSwin2SR
-except ImportError:
-    from model import MAGSwin2SR
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from SFGSwinSR import MAGSwin2SR
 
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(CURRENT_DIR, "config.yml")
 SEED = 42

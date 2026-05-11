@@ -4,6 +4,7 @@ import json
 import os
 import sys
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Dict, List
 
 import torch
@@ -11,7 +12,13 @@ import torch.nn as nn
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
 
-from model import MAGSwin2SR
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SPACENET_DIR = PROJECT_ROOT / "spacenet"
+for path in (PROJECT_ROOT, SPACENET_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
+from SFGSwinSR import MAGSwin2SR
 from evaluation import (
     DEFAULT_HR_DIR as DEFAULT_EVAL_HR_DIR,
     DEFAULT_LR_DIR as DEFAULT_EVAL_LR_DIR,
@@ -42,7 +49,7 @@ from singleSR_model_train import (
 
 OUTPUTS_ROOT = "outputs"
 ABLATIONS_ROOT = "ablations"
-DEFAULT_CONFIG_PATH = "path/to/config_file"
+DEFAULT_CONFIG_PATH = str(PROJECT_ROOT / "spacenet" / "config.json")
 os.makedirs(ABLATIONS_ROOT, exist_ok=True)
 
 STANDARD_MODEL_KEYS = {

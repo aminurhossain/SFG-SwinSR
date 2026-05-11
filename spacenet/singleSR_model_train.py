@@ -9,7 +9,9 @@ Notes:
 
 import os
 import random
+import sys
 from math import log10
+from pathlib import Path
 
 import kornia
 import numpy as np
@@ -23,16 +25,20 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader, Dataset, random_split
 from tqdm import tqdm
 
-from model import MAGSwin2SR
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from SFGSwinSR import MAGSwin2SR
 
 
 # ============================================================
 # CONFIG
 # ============================================================
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-DATA_ROOT = os.path.join(PROJECT_ROOT, "data")
-OUTPUTS_ROOT = os.path.join(PROJECT_ROOT, "outputs")
+CURRENT_DIR = Path(__file__).resolve().parent
+DATA_ROOT = os.path.join(CURRENT_DIR, "data")
+OUTPUTS_ROOT = os.path.join(CURRENT_DIR, "outputs")
 
 LR_DIR = "path/to/your/train_lr_dir"
 HR_DIR = "path/to/your/train_hr_dir"

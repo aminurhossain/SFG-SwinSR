@@ -1,7 +1,9 @@
 import argparse
 import os
 import random
+import sys
 from math import log10
+from pathlib import Path
 
 import kornia
 import numpy as np
@@ -16,13 +18,13 @@ from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader, Dataset, random_split
 from tqdm import tqdm
 
-try:
-    from .model import MAGSwin2SR
-except ImportError:
-    from model import MAGSwin2SR
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from SFGSwinSR import MAGSwin2SR
 
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_PATH = os.path.join(CURRENT_DIR, "config.yml")
 SEED = 42
@@ -498,11 +500,11 @@ def main():
 
         if val_psnr > best_psnr:
             best_psnr = val_psnr
-            best_path = os.path.join(args.save_dir, "best_SFG_swinSR.pt")
+            best_path = os.path.join(args.save_dir, "best_Swin2SR.pt")
             torch.save(model.state_dict(), best_path)
             print(f"Saved best model: {best_path} | Best PSNR: {best_psnr:.2f} dB")
 
-        latest_path = os.path.join(args.save_dir, "latest_SFG_swinSR.pt")
+        latest_path = os.path.join(args.save_dir, "latest_Swin2SR.pt")
         torch.save(
             {
                 "epoch": epoch,
@@ -526,10 +528,10 @@ def main():
         )
 
         if epoch % 2 == 0:
-            periodic_path = os.path.join(args.save_dir, f"SFG_swinSR_epoch{epoch}.pt")
+            periodic_path = os.path.join(args.save_dir, f"Swin2SR_epoch{epoch}.pt")
             torch.save(model.state_dict(), periodic_path)
 
-    final_path = os.path.join(args.save_dir, "SFG_swinSR_final.pt")
+    final_path = os.path.join(args.save_dir, "Swin2SR_final.pt")
     torch.save(model.state_dict(), final_path)
     print(f"Saved final model: {final_path}")
     print("Training completed.")
