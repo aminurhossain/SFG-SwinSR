@@ -133,6 +133,8 @@ The current repository is organized around experiments on:
 - SpaceNet / WorldView-2
 - SEN2VENuS
 
+The `data/` directory in this repository contains sample files only for smoke testing and command-line verification. It is not the full training or evaluation dataset release.
+
 Dataset paths, scale settings, crop sizes, and normalization statistics are defined in:
 
 - `spacenet/config.yml`
