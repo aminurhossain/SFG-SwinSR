@@ -1,498 +1,476 @@
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "0"
-
 import argparse
 import csv
 import json
+import re
 from pathlib import Path
 
 import numpy as np
 import rasterio
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-import yaml
-import piq
 from affine import Affine
-from skimage.metrics import peak_signal_noise_ratio as psnr_metric
 from skimage.metrics import structural_similarity as ssim_metric
 from torch.utils.data import DataLoader, Dataset
+from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution
 from tqdm import tqdm
 
-try:
-    from .model import MAGSwin2SR
-except ImportError:
-    from model import MAGSwin2SR
+from model import MAGSwin2SR
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CURRENT_DIR = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = CURRENT_DIR / "config.yml"
+DEFAULT_LR_DIR = "path/to/your/lr_dir"
+DEFAULT_HR_DIR = "path/to/your/hr_dir"
+DEFAULT_CHECKPOINT = "path/to/your/checkpoint"
+DEFAULT_OUTPUT_DIR = "path/to/your/save_dir"
 VALID_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
+BIT_MAX = 2047.0
+SCALE = 2
+IMG_SIZE = 64
+WINDOW_SIZE = 8
+DEPTHS = [6, 6, 6, 6, 6, 6]
+NUM_HEADS = [6, 6, 6, 6, 6, 6]
+EMBED_DIM = 180
+NUM_CHANNELS = 3
+MLP_RATIO = 2.0
+EVAL_BATCH_SIZE = 1
+PSNR_EPS = 1e-10
 
 
-def load_config(path):
-    with open(path, "r", encoding="utf-8") as handle:
-        return yaml.safe_load(handle) or {}
+def print_model_parameter_count(model, label):
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(
+        f"{label}: total={total_params / 1e6:.2f}M | "
+        f"trainable={trainable_params / 1e6:.2f}M"
+    )
 
 
-def build_parser():
-    parser = argparse.ArgumentParser(description="Evaluate standalone SingleSR Sen2Venus checkpoints.")
-    parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
-    parser.add_argument("--dataset-profile", "--dataset_profile", dest="dataset_profile", default=None)
-    parser.add_argument("--lr-dir", "--lr_dir", dest="lr_dir", default=None)
-    parser.add_argument("--hr-dir", "--hr_dir", dest="hr_dir", default=None)
-    parser.add_argument("--checkpoint", default=None)
-    parser.add_argument("--output-dir", "--output_dir", dest="output_dir", default=None)
-    parser.add_argument("--batch-size", "--batch_size", dest="batch_size", type=int, default=4)
-    parser.add_argument("--max-samples", "--max_samples", dest="max_samples", type=int, default=None)
-    parser.add_argument("--device", default=None)
-    parser.add_argument("--metric-backend", "--metric_backend", dest="metric_backend", choices=("skimage", "piq"), default="skimage")
-    parser.add_argument("--save-bicubic-images", "--save_bicubic_images", dest="save_bicubic_images", action="store_true")
-    parser.add_argument("--no-hr", "--no_hr", dest="no_hr", action="store_true")
-    return parser
+def strip_lr_variant_suffix(stem):
+    return re.sub(r"_\d+$", "", stem)
 
 
-def resolve_args():
-    parser = build_parser()
-    args = parser.parse_args()
-    cfg = load_config(args.config)
+class StandardSwin2SR(nn.Module):
+    def __init__(self):
+        super().__init__()
+        config = Swin2SRConfig(
+            num_channels=NUM_CHANNELS,
+            upscale=SCALE,
+            img_size=IMG_SIZE,
+            window_size=WINDOW_SIZE,
+            depths=DEPTHS,
+            num_heads=NUM_HEADS,
+            embed_dim=EMBED_DIM,
+            mlp_ratio=MLP_RATIO,
+        )
+        self.swin2sr = Swin2SRForImageSuperResolution(config)
 
-    data_cfg = cfg.get("data", {})
-    profiles = data_cfg.get("profiles", {})
-    profile_name = args.dataset_profile or data_cfg.get("dataset_profile", "sen2venus_2x")
-    if profile_name not in profiles:
-        raise ValueError(
-            f"Unknown dataset profile '{profile_name}'. Available: {sorted(profiles.keys())}"
+    def forward(self, pixel_values):
+        return torch.clamp(
+            self.swin2sr(pixel_values=pixel_values).reconstruction,
+            0.0,
+            1.0,
         )
 
-    profile_cfg = profiles[profile_name]
-    dataset_root = profile_cfg["dataset_root"]
 
-    if args.lr_dir is None:
-        args.lr_dir = str(PROJECT_ROOT / dataset_root / profile_cfg["lr_subdir"])
-    if args.hr_dir is None and not args.no_hr:
-        args.hr_dir = str(PROJECT_ROOT / dataset_root / profile_cfg["hr_subdir"])
-    if args.checkpoint is None:
-        args.checkpoint = str(PROJECT_ROOT / profile_cfg["save_dir"] / "best_SFG_swinSR.pt")
-    if args.output_dir is None:
-        args.output_dir = str(PROJECT_ROOT / "outputs" / "evaluation" / f"SFG_inference_2x_{profile_name}")
-
-    args.dataset_profile = profile_name
-    args.scale = int(profile_cfg["scale"])
-    args.num_channels = int(profile_cfg["num_channels"])
-    args.lr_crop_size = int(profile_cfg["lr_crop_size"])
-    args.lr_suffix = profile_cfg.get("lr_suffix")
-    args.hr_suffix = profile_cfg.get("hr_suffix")
-    args.normalization = profile_cfg["normalization"]
-    args.model_config = cfg.get("model", {})
-    return args
-
-
-def list_image_paths(image_dir):
-    image_dir = Path(image_dir)
-    if not image_dir.is_dir():
-        raise FileNotFoundError(f"Directory not found: {image_dir}")
-
-    paths = sorted(path for path in image_dir.iterdir() if path.is_file() and path.suffix.lower() in VALID_EXTS)
-    if not paths:
-        raise ValueError(f"No images found in: {image_dir}")
-    return paths
-
-
-def build_hr_lookup(hr_dir, hr_suffix=None):
-    lookup = {}
-    for path in list_image_paths(hr_dir):
-        if hr_suffix and not path.name.endswith(hr_suffix):
-            continue
-        key = path.name[: -len(hr_suffix)] if hr_suffix else path.stem
-        lookup[key] = path
-    return lookup
-
-
-class EvaluationDataset(Dataset):
-    def __init__(
-        self,
-        lr_dir,
-        hr_dir=None,
-        scale=2,
-        normalization=None,
-        num_channels=4,
-        lr_suffix=None,
-        hr_suffix=None,
-        max_samples=None,
-    ):
+class SingleSRTestDataset(Dataset):
+    def __init__(self, lr_dir, hr_dir=None, bit_max=BIT_MAX):
         self.lr_dir = Path(lr_dir)
         self.hr_dir = Path(hr_dir) if hr_dir else None
-        self.scale = int(scale)
-        self.normalization = normalization or {}
-        self.num_channels = int(num_channels)
-        self.lr_suffix = lr_suffix
-        self.hr_suffix = hr_suffix
-        self.hr_lookup = build_hr_lookup(self.hr_dir, hr_suffix=hr_suffix) if self.hr_dir else {}
+        self.bit_max = float(bit_max)
+
+        if not self.lr_dir.exists():
+            raise FileNotFoundError(f"LR directory not found: {self.lr_dir}")
+
+        self.hr_lookup = self._build_hr_lookup(self.hr_dir) if self.hr_dir else {}
         self.samples = self._build_samples()
-        if max_samples is not None:
-            self.samples = self.samples[: max_samples]
+
         if not self.samples:
             raise ValueError("No valid evaluation samples found.")
 
-    def _lr_key(self, path):
-        if self.lr_suffix and path.name.endswith(self.lr_suffix):
-            return path.name[: -len(self.lr_suffix)]
-        return path.stem
+    @staticmethod
+    def _build_hr_lookup(hr_dir):
+        if not hr_dir.exists():
+            raise FileNotFoundError(f"HR directory not found: {hr_dir}")
+
+        lookup = {}
+        for path in sorted(hr_dir.iterdir()):
+            if path.is_file() and path.suffix.lower() in VALID_EXTS:
+                lookup[path.stem] = path
+        return lookup
+
+    def _match_hr_path(self, lr_path):
+        if not self.hr_lookup:
+            return None
+
+        direct_match = self.hr_lookup.get(lr_path.stem)
+        if direct_match is not None:
+            return direct_match
+
+        base_name = strip_lr_variant_suffix(lr_path.stem)
+        return self.hr_lookup.get(base_name)
 
     def _build_samples(self):
         samples = []
-        for lr_path in list_image_paths(self.lr_dir):
-            if self.lr_suffix and not lr_path.name.endswith(self.lr_suffix):
+        for lr_path in sorted(self.lr_dir.iterdir()):
+            if not lr_path.is_file() or lr_path.suffix.lower() not in VALID_EXTS:
                 continue
-            key = self._lr_key(lr_path)
-            hr_path = self.hr_lookup.get(key) if self.hr_lookup else None
+
+            hr_path = self._match_hr_path(lr_path)
             if self.hr_dir and hr_path is None:
                 continue
-            samples.append({"name": key, "lr_path": lr_path, "hr_path": hr_path})
-        return samples
 
-    def _select_channels(self, img, path):
-        if img.shape[0] < self.num_channels:
-            raise ValueError(
-                f"Image {path} has {img.shape[0]} channels, expected at least {self.num_channels}"
+            samples.append(
+                {
+                    "name": lr_path.stem,
+                    "lr_path": lr_path,
+                    "hr_path": hr_path,
+                }
             )
-        if img.shape[0] > self.num_channels:
-            img = img[: self.num_channels]
-        return img
-
-    def _normalize(self, img, role):
-        mean = np.asarray(self.normalization[f"{role}_mean"], dtype=np.float32)[: self.num_channels]
-        std = np.asarray(self.normalization[f"{role}_std"], dtype=np.float32)[: self.num_channels]
-        return (img - mean[:, None, None]) / std[:, None, None]
-
-    def _read(self, path, role):
-        with rasterio.open(path) as src:
-            img = src.read().astype(np.float32)
-        img = self._select_channels(img, path)
-        img = self._normalize(img, role)
-        return torch.from_numpy(img.copy())
+        return samples
 
     def __len__(self):
         return len(self.samples)
 
+    def _read_and_normalize(self, path):
+        with rasterio.open(path) as src:
+            img = src.read().astype(np.float32)
+
+        if img.shape[0] == 1:
+            img = np.repeat(img, 3, axis=0)
+        elif img.shape[0] > 3:
+            img = img[:3]
+
+        img = np.clip(img / self.bit_max, 0.0, 1.0)
+        return torch.from_numpy(img.copy())
+
     def __getitem__(self, idx):
         sample = self.samples[idx]
-        item = {
+        lr_tensor = self._read_and_normalize(sample["lr_path"])
+        hr_tensor = (
+            self._read_and_normalize(sample["hr_path"])
+            if sample["hr_path"] is not None
+            else None
+        )
+
+        if hr_tensor is not None:
+            expected_h = lr_tensor.shape[1] * SCALE
+            expected_w = lr_tensor.shape[2] * SCALE
+            hr_tensor = hr_tensor[:, :expected_h, :expected_w]
+
+            if hr_tensor.shape[-2:] != (expected_h, expected_w):
+                raise ValueError(
+                    f"HR size mismatch for {sample['name']}: got {tuple(hr_tensor.shape)}, "
+                    f"expected (3, {expected_h}, {expected_w})"
+                )
+
+        return {
             "name": sample["name"],
-            "lr": self._read(sample["lr_path"], "lr"),
+            "lr": lr_tensor,
+            "hr": hr_tensor,
             "lr_path": str(sample["lr_path"]),
             "hr_path": str(sample["hr_path"]) if sample["hr_path"] is not None else "",
         }
-        if sample["hr_path"] is not None:
-            item["hr"] = self._read(sample["hr_path"], "hr")
-        return item
 
 
-def denormalize_tensor(tensor, mean, std):
-    mean_t = torch.as_tensor(mean, device=tensor.device, dtype=tensor.dtype).view(1, -1, 1, 1)
-    std_t = torch.as_tensor(std, device=tensor.device, dtype=tensor.dtype).view(1, -1, 1, 1)
-    return tensor * std_t + mean_t
+def eval_collate(batch):
+    first_item = batch[0]
+    hr_is_available = first_item["hr"] is not None
+
+    lr_tensors = [item["lr"] for item in batch]
+    hr_tensors = [item["hr"] for item in batch] if hr_is_available else None
+    lr_shapes = {tuple(tensor.shape) for tensor in lr_tensors}
+    hr_shapes = {tuple(tensor.shape) for tensor in hr_tensors} if hr_tensors else set()
+
+    if len(lr_shapes) > 1 or len(hr_shapes) > 1:
+        raise ValueError(
+            "Evaluation batch contains different image sizes. "
+            "Use --batch-size 1 for full-image evaluation."
+        )
+
+    return {
+        "name": [item["name"] for item in batch],
+        "lr": torch.stack(lr_tensors, dim=0),
+        "hr": torch.stack(hr_tensors, dim=0) if hr_is_available else None,
+        "lr_path": [item["lr_path"] for item in batch],
+        "hr_path": [item["hr_path"] for item in batch],
+    }
 
 
-def to_printable_tensor(tensor, min_vals, max_vals):
-    min_t = torch.as_tensor(min_vals, device=tensor.device, dtype=tensor.dtype).view(1, -1, 1, 1)
-    max_t = torch.as_tensor(max_vals, device=tensor.device, dtype=tensor.dtype).view(1, -1, 1, 1)
-    return torch.clamp((tensor - min_t) / (max_t - min_t + 1e-8), 0.0, 1.0)
-
-
-def to_metric_space(tensor, role, normalization):
-    denorm = denormalize_tensor(tensor, normalization[f"{role}_mean"], normalization[f"{role}_std"])
-    return to_printable_tensor(denorm, normalization[f"{role}_min"], normalization[f"{role}_max"])
-
-
-def to_physical_space(tensor, role, normalization):
-    return denormalize_tensor(tensor, normalization[f"{role}_mean"], normalization[f"{role}_std"])
-
-
-def upsample_lr_to_hr_metric(lr_tensor, hr_size, normalization, mode):
-    lr_physical = denormalize_tensor(
-        lr_tensor,
-        normalization["lr_mean"],
-        normalization["lr_std"],
-    )
-    upsampled_physical = F.interpolate(
-        lr_physical,
-        size=hr_size,
-        mode=mode,
-        align_corners=False,
-    )
-    return to_printable_tensor(
-        upsampled_physical,
-        normalization["hr_min"],
-        normalization["hr_max"],
-    )
-
-
-def compute_psnr(sr, hr, backend="skimage"):
+def compute_psnr(sr, hr):
     sr = torch.clamp(sr, 0.0, 1.0)
     hr = torch.clamp(hr, 0.0, 1.0)
-    if backend == "piq":
-        return float(piq.psnr(sr, hr, data_range=1.0, reduction="mean").item())
-    sr_np = sr.squeeze(0).permute(1, 2, 0).detach().cpu().numpy().astype(np.float32)
-    hr_np = hr.squeeze(0).permute(1, 2, 0).detach().cpu().numpy().astype(np.float32)
-    return float(psnr_metric(hr_np, sr_np, data_range=1.0))
+    mse = torch.clamp(F.mse_loss(sr, hr), min=PSNR_EPS)
+    return float(-10.0 * torch.log10(mse).item())
 
 
-def compute_ssim(sr, hr, backend="skimage"):
-    sr = torch.clamp(sr, 0.0, 1.0)
-    hr = torch.clamp(hr, 0.0, 1.0)
-    if backend == "piq":
-        return float(piq.ssim(sr, hr, data_range=1.0, reduction="mean").item())
-    sr_np = sr.squeeze(0).permute(1, 2, 0).detach().cpu().numpy().astype(np.float32)
-    hr_np = hr.squeeze(0).permute(1, 2, 0).detach().cpu().numpy().astype(np.float32)
-    return float(ssim_metric(hr_np, sr_np, data_range=1.0, channel_axis=-1))
+def compute_ssim(sr, hr, bit_max=BIT_MAX):
+    sr_np = sr.squeeze(0).permute(1, 2, 0).detach().cpu().numpy()
+    hr_np = hr.squeeze(0).permute(1, 2, 0).detach().cpu().numpy()
+
+    sr_np = np.clip(sr_np, 0.0, 1.0).astype(np.float32) * bit_max
+    hr_np = np.clip(hr_np, 0.0, 1.0).astype(np.float32) * bit_max
+
+    return float(ssim_metric(hr_np, sr_np, data_range=bit_max, channel_axis=-1))
 
 
 def compute_mae(sr, hr):
-    return float(torch.mean(torch.abs(torch.clamp(sr, 0.0, 1.0) - torch.clamp(hr, 0.0, 1.0))).item())
+    return float(F.l1_loss(sr, hr).item())
 
 
-def build_model(args, device):
-    model_kwargs = dict(args.model_config)
-    model_kwargs["img_size"] = args.lr_crop_size
-    model_kwargs["upscale"] = args.scale
-    model_kwargs["num_channels"] = args.num_channels
-    model = MAGSwin2SR(**model_kwargs).to(device)
-    checkpoint = torch.load(args.checkpoint, map_location=device)
+def build_model(model_type, checkpoint_path, device):
+    if model_type == "mag":
+        model = MAGSwin2SR(
+            upscale=SCALE,
+            img_size=IMG_SIZE,
+            window_size=WINDOW_SIZE,
+            depths=DEPTHS,
+            num_heads=NUM_HEADS,
+            embed_dim=EMBED_DIM,
+            num_channels=NUM_CHANNELS,
+            mlp_ratio=MLP_RATIO,
+        ).to(device)
+    elif model_type == "standard":
+        model = StandardSwin2SR().to(device)
+    else:
+        raise ValueError(f"Unsupported model type: {model_type}")
+
+    checkpoint = torch.load(checkpoint_path, map_location=device)
     state_dict = checkpoint.get("model_state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
     model.load_state_dict(state_dict)
     model.eval()
+    print_model_parameter_count(model, "Evaluation model")
+    return model, checkpoint
 
-    return model
 
+def save_sr_image(sr_tensor, output_path, lr_path, hr_path, bit_max=BIT_MAX, upscale=SCALE):
+    sr_np = sr_tensor.squeeze(0).detach().cpu().numpy()
+    sr_np = np.clip(sr_np, 0.0, 1.0)
+    sr_np = np.rint(sr_np * bit_max).astype(np.uint16)
 
-def save_sr_image(sr_physical_tensor, output_path, lr_path, hr_path, upscale, normalization):
-    sr_np = sr_physical_tensor.squeeze(0).detach().cpu().numpy()
     source_path = Path(hr_path) if hr_path else Path(lr_path)
     with rasterio.open(source_path) as src:
         profile = src.profile.copy()
         transform = src.transform
-        source_dtype = np.dtype(profile["dtype"])
-        if hr_path:
-            out_height, out_width = sr_np.shape[-2:]
-            out_transform = transform
-        else:
-            out_height, out_width = sr_np.shape[-2:]
-            out_transform = transform * Affine.scale(1 / upscale, 1 / upscale)
-
-    # Restore the exported raster to the source data's physical domain.
-    sr_np = np.clip(
-        sr_np,
-        np.asarray(normalization["hr_min"], dtype=np.float32)[:, None, None],
-        np.asarray(normalization["hr_max"], dtype=np.float32)[:, None, None],
-    )
-
-    if np.issubdtype(source_dtype, np.integer):
-        dtype_info = np.iinfo(source_dtype)
-        sr_np = np.clip(sr_np, dtype_info.min, dtype_info.max)
-        sr_np = np.rint(sr_np).astype(source_dtype)
-    else:
-        sr_np = sr_np.astype(source_dtype)
 
     profile.update(
+        dtype="uint16",
         count=sr_np.shape[0],
-        dtype=sr_np.dtype,
-        height=out_height,
-        width=out_width,
-        transform=out_transform,
+        height=sr_np.shape[1],
+        width=sr_np.shape[2],
     )
+
+    if not hr_path and transform is not None:
+        profile["transform"] = transform * Affine.scale(1 / upscale, 1 / upscale)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with rasterio.open(output_path, "w", **profile) as dst:
         dst.write(sr_np)
 
 
-def write_csv(path, rows, fieldnames):
-    with open(path, "w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+def write_metrics(output_dir, per_image_rows, summary):
+    csv_path = output_dir / "metrics.csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=per_image_rows[0].keys())
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(per_image_rows)
+
+    summary_path = output_dir / "summary.json"
+    with open(summary_path, "w", encoding="utf-8") as handle:
+        json.dump(summary, handle, indent=2)
 
 
-def main():
-    args = resolve_args()
-    device = torch.device(args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu"))
-    print(f"Using device: {device}")
-    print(f"Dataset profile: {args.dataset_profile}")
-    print(f"Checkpoint: {args.checkpoint}")
-    print(f"Metric backend: {args.metric_backend}")
-
-    dataset = EvaluationDataset(
-        lr_dir=args.lr_dir,
-        hr_dir=None if args.no_hr else args.hr_dir,
-        scale=args.scale,
-        normalization=args.normalization,
-        num_channels=args.num_channels,
-        lr_suffix=args.lr_suffix,
-        hr_suffix=args.hr_suffix,
-        max_samples=args.max_samples,
+def parse_args():
+    parser = argparse.ArgumentParser(description="Evaluate SingleSR checkpoints.")
+    parser.add_argument("--model-type", choices=["mag", "standard"], default="mag")
+    parser.add_argument("--lr-dir", default=str(DEFAULT_LR_DIR))
+    parser.add_argument("--hr-dir", default=str(DEFAULT_HR_DIR))
+    parser.add_argument("--checkpoint", default=str(DEFAULT_CHECKPOINT))
+    parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
+    parser.add_argument("--batch-size", type=int, default=EVAL_BATCH_SIZE)
+    parser.add_argument("--device", default=None, help="cuda, cuda:0, cpu, etc.")
+    parser.add_argument("--save-bicubic-images", action="store_true")
+    parser.add_argument(
+        "--no-hr",
+        action="store_true",
+        help="Run inference-only evaluation without HR targets or metrics.",
     )
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
-    model = build_model(args, device)
+    return parser.parse_args()
 
+
+def run_evaluation(args):
+    device_name = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(device_name)
+
+    checkpoint_path = Path(args.checkpoint)
+    lr_dir = Path(args.lr_dir)
+    hr_dir = None if args.no_hr else Path(args.hr_dir)
     output_dir = Path(args.output_dir)
-    sr_dir = output_dir / "sr"
-    bicubic_dir = output_dir / "bicubic"
+    sr_dir = output_dir / "sr_images"
+    bicubic_dir = output_dir / "bicubic_images"
+
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+    if not lr_dir.exists():
+        raise FileNotFoundError(f"LR directory not found: {lr_dir}")
+    if hr_dir is not None and not hr_dir.exists():
+        raise FileNotFoundError(f"HR directory not found: {hr_dir}")
+    if args.batch_size < 1:
+        raise ValueError("--batch-size must be at least 1.")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
     sr_dir.mkdir(parents=True, exist_ok=True)
     if args.save_bicubic_images:
         bicubic_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = []
-    ssim_values = []
+    dataset = SingleSRTestDataset(
+        lr_dir=lr_dir,
+        hr_dir=hr_dir,
+        bit_max=BIT_MAX,
+    )
+    loader = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=0,
+        collate_fn=eval_collate,
+    )
+
+    print(f"Using device: {device}")
+    print(f"Model type: {args.model_type}")
+    print(f"Checkpoint: {checkpoint_path}")
+    print(f"LR dir: {lr_dir}")
+    print(f"HR dir: {hr_dir if hr_dir is not None else 'None'}")
+    print(f"Output dir: {output_dir}")
+    print(f"Found {len(dataset)} samples")
+
+    model, checkpoint = build_model(args.model_type, checkpoint_path, device)
+    if isinstance(checkpoint, dict) and "epoch" in checkpoint:
+        print(f"Loaded checkpoint from epoch {checkpoint['epoch']}")
+
+    per_image_rows = []
     psnr_values = []
+    ssim_values = []
     mae_values = []
-    bicubic_psnr_values = []
-    bicubic_ssim_values = []
-    bicubic_mae_values = []
+    joint_values = []
 
     with torch.no_grad():
-        for batch in tqdm(loader, desc="Evaluation"):
+        loop = tqdm(loader, desc="Evaluating")
+        for batch in loop:
             lr = batch["lr"].to(device)
-            hr = batch["hr"].to(device) if "hr" in batch else None
+            hr = batch["hr"].to(device) if batch["hr"] is not None else None
 
-            sr = model(pixel_values=lr)
-            sr_physical = to_physical_space(sr, "hr", args.normalization)
-            sr_metric = to_metric_space(sr, "hr", args.normalization)
-            hr_metric = to_metric_space(hr, "hr", args.normalization) if hr is not None else None
-            bicubic_metric = None
-            bicubic_physical = None
-            if hr_metric is not None:
-                target_size = hr_metric.shape[-2:]
-                bicubic_metric = upsample_lr_to_hr_metric(
-                    lr,
-                    target_size,
-                    args.normalization,
-                    mode="bicubic",
-                )
-                bicubic_physical = F.interpolate(
-                    to_physical_space(lr, "lr", args.normalization),
-                    size=target_size,
-                    mode="bicubic",
-                    align_corners=False,
-                )
-            elif args.save_bicubic_images:
-                target_size = (
-                    lr.shape[-2] * args.scale,
-                    lr.shape[-1] * args.scale,
-                )
-                bicubic_metric = upsample_lr_to_hr_metric(
-                    lr,
-                    target_size,
-                    args.normalization,
-                    mode="bicubic",
-                )
-                bicubic_physical = F.interpolate(
-                    to_physical_space(lr, "lr", args.normalization),
-                    size=target_size,
-                    mode="bicubic",
-                    align_corners=False,
-                )
+            sr = torch.clamp(model(pixel_values=lr), 0.0, 1.0)
+            batch_psnr_values = []
+            batch_ssim_values = []
 
             for i, name in enumerate(batch["name"]):
-                sr_i = sr_metric[i : i + 1]
-                sr_physical_i = sr_physical[i : i + 1]
-                hr_i = hr_metric[i : i + 1] if hr_metric is not None else None
-                bicubic_i = bicubic_metric[i : i + 1] if bicubic_metric is not None else None
-                bicubic_physical_i = bicubic_physical[i : i + 1] if bicubic_physical is not None else None
+                sr_i = sr[i : i + 1]
+                hr_i = hr[i : i + 1] if hr is not None else None
+                lr_i = lr[i : i + 1]
                 lr_path = batch["lr_path"][i]
                 hr_path = batch["hr_path"][i]
 
                 output_path = sr_dir / f"{name}_SR.tif"
-                save_sr_image(
-                    sr_physical_i,
-                    output_path,
-                    lr_path,
-                    hr_path,
-                    upscale=args.scale,
-                    normalization=args.normalization,
-                )
-                row = {"name": name, "lr_path": lr_path, "hr_path": hr_path, "sr_path": str(output_path)}
+                save_sr_image(sr_i, output_path, lr_path, hr_path)
+
+                row = {
+                    "name": name,
+                    "lr_path": lr_path,
+                    "hr_path": hr_path,
+                    "sr_path": str(output_path),
+                }
 
                 if args.save_bicubic_images:
+                    if hr_i is not None:
+                        bicubic = F.interpolate(
+                            lr_i,
+                            size=hr_i.shape[-2:],
+                            mode="bicubic",
+                            align_corners=False,
+                        )
+                    else:
+                        bicubic = F.interpolate(
+                            lr_i,
+                            scale_factor=SCALE,
+                            mode="bicubic",
+                            align_corners=False,
+                        )
+
+                    bicubic = torch.clamp(bicubic, 0.0, 1.0)
                     bicubic_path = bicubic_dir / f"{name}_bicubic.tif"
-                    save_sr_image(
-                        bicubic_physical_i,
-                        bicubic_path,
-                        lr_path,
-                        hr_path,
-                        upscale=args.scale,
-                        normalization=args.normalization,
-                    )
+                    save_sr_image(bicubic, bicubic_path, lr_path, hr_path)
                     row["bicubic_path"] = str(bicubic_path)
 
                 if hr_i is not None:
-                    psnr_value = compute_psnr(sr_i, hr_i, backend=args.metric_backend)
-                    ssim_value = compute_ssim(sr_i, hr_i, backend=args.metric_backend)
+                    psnr_value = compute_psnr(sr_i, hr_i)
+                    ssim_value = compute_ssim(sr_i, hr_i)
                     mae_value = compute_mae(sr_i, hr_i)
-
                     joint_value = 40.0 * ssim_value + psnr_value
-                    bicubic_psnr_value = compute_psnr(bicubic_i, hr_i, backend=args.metric_backend)
-                    bicubic_ssim_value = compute_ssim(bicubic_i, hr_i, backend=args.metric_backend)
-                    bicubic_mae_value = compute_mae(bicubic_i, hr_i)
+
                     row.update(
                         {
                             "psnr": f"{psnr_value:.6f}",
                             "ssim": f"{ssim_value:.6f}",
                             "mae": f"{mae_value:.6f}",
                             "joint": f"{joint_value:.6f}",
-                            "bicubic_psnr": f"{bicubic_psnr_value:.6f}",
-                            "bicubic_ssim": f"{bicubic_ssim_value:.6f}",
-                            "bicubic_mae": f"{bicubic_mae_value:.6f}",
                         }
                     )
+
                     psnr_values.append(psnr_value)
                     ssim_values.append(ssim_value)
                     mae_values.append(mae_value)
-                    bicubic_psnr_values.append(bicubic_psnr_value)
-                    bicubic_ssim_values.append(bicubic_ssim_value)
-                    bicubic_mae_values.append(bicubic_mae_value)
+                    joint_values.append(joint_value)
+                    batch_psnr_values.append(psnr_value)
+                    batch_ssim_values.append(ssim_value)
 
-                rows.append(row)
+                per_image_rows.append(row)
 
-    metrics_path = output_dir / "metrics.csv"
-    if rows:
-        write_csv(metrics_path, rows, list(rows[0].keys()))
+            if batch_psnr_values:
+                loop.set_postfix(
+                    batch_psnr=f"{np.mean(batch_psnr_values):.2f}",
+                    avg_psnr=f"{np.mean(psnr_values):.2f}",
+                    batch_ssim=f"{np.mean(batch_ssim_values):.4f}",
+                    avg_ssim=f"{np.mean(ssim_values):.4f}",
+                )
+            else:
+                loop.set_postfix(saved=len(per_image_rows))
 
     summary = {
-        "dataset_profile": args.dataset_profile,
-        "checkpoint": args.checkpoint,
-        "num_samples": len(rows),
-        "with_hr": not args.no_hr,
-        "metric_backend": args.metric_backend,
+        "num_samples": len(per_image_rows),
+        "checkpoint": str(checkpoint_path),
+        "model_type": args.model_type,
+        "lr_dir": str(lr_dir),
+        "hr_dir": str(hr_dir) if hr_dir is not None else None,
+        "output_dir": str(output_dir),
     }
+
     if psnr_values:
         summary.update(
             {
-                "psnr": float(np.mean(psnr_values)),
-                "ssim": float(np.mean(ssim_values)),
-                "mae": float(np.mean(mae_values)),
-                "joint": float(np.mean(psnr_values) + 40.0 * np.mean(ssim_values)),
-                "bicubic_psnr": float(np.mean(bicubic_psnr_values)),
-                "bicubic_ssim": float(np.mean(bicubic_ssim_values)),
-                "bicubic_mae": float(np.mean(bicubic_mae_values)),
+                "mean_psnr": float(np.mean(psnr_values)),
+                "mean_ssim": float(np.mean(ssim_values)),
+                "mean_mae": float(np.mean(mae_values)),
+                "mean_joint": float(np.mean(joint_values)),
             }
         )
 
-    summary_path = output_dir / "summary.json"
-    with open(summary_path, "w", encoding="utf-8") as handle:
-        json.dump(summary, handle, indent=2)
+    write_metrics(output_dir, per_image_rows, summary)
 
-    print(f"Saved metrics: {metrics_path}")
-    print(f"Saved summary: {summary_path}")
+    print("\nEvaluation complete")
     if psnr_values:
         print(
-            f"PSNR: {summary['psnr']:.4f} | SSIM: {summary['ssim']:.4f} | "
-            f"MAE: {summary['mae']:.6f} | JOINT: {summary['joint']:.4f}"
+            f"Mean PSNR: {summary['mean_psnr']:.4f} dB | "
+            f"Mean SSIM: {summary['mean_ssim']:.4f} | "
+            f"Mean MAE: {summary['mean_mae']:.6f} | "
+            f"Mean JOINT: {summary['mean_joint']:.4f}"
         )
-        print(
-            f"Bicubic PSNR: {summary['bicubic_psnr']:.4f} | "
-            f"Bicubic SSIM: {summary['bicubic_ssim']:.4f} | "
-            f"Bicubic MAE: {summary['bicubic_mae']:.6f}"
-        )
+    print(f"Metrics CSV: {output_dir / 'metrics.csv'}")
+    print(f"Summary JSON: {output_dir / 'summary.json'}")
+    return summary
+
+
+def main():
+    args = parse_args()
+    run_evaluation(args)
 
 
 if __name__ == "__main__":

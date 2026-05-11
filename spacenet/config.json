@@ -1,0 +1,20 @@
+{
+  "mode": "train_eval",
+  "experiments": [
+    "all"
+  ],
+  "epochs": 200,
+  "batch_size": 16,
+  "num_workers": 8,
+  "split_ratio": 0.9,
+  "train_lr_dir": "path/to/your/train_lr_dir",
+  "train_hr_dir": "path/to/your/train_hr_dir",
+  "test_lr_dir": "path/to/your/test_lr_dir",
+  "test_hr_dir": "path/to/your/test_hr_dir",
+  "save_root": "path/to/your/save_dir",
+  "device": null,
+  "eval_batch_size": 16,
+  "eval_checkpoint_name": "best",
+  "eval_save_bicubic_images": false,
+  "eval_no_hr": false
+}
