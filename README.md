@@ -1,10 +1,39 @@
-# SFG-SwinSR
+<p align="center">
+  <img src="docs/images/architecture.png" alt="SFG-SwinSR overview" width="88%">
+</p>
 
-Spatial-Frequency Gated Swin Transformer for remote sensing single-image super-resolution.
+<h1 align="center">
+  SFG-SwinSR: Spatial-Frequency Gated Swin Transformer for Remote Sensing Single-Image Super-Resolution
+</h1>
+
+<p align="center">
+  Md Aminur Hossain,
+  Parekh Valkesh,
+  Ayush V. Patel,
+  Yogesh Jethani,
+  Sanjay K. Singh,
+  Biplab Banerjee
+</p>
+
+<p align="center">
+  <b>
+    Space Applications Centre, ISRO, Ahmedabad, India<br>
+    Indian Institute of Technology Bombay, India<br>
+    New L J Institute of Engineering and Technology, Ahmedabad, India<br>
+    Pandit Deendayal Energy University, Gandhinagar, India<br>
+    GLS University, Ahmedabad, India
+  </b>
+</p>
+
+<p align="center">
+  <a href="https://arxiv.org/abs/xxxx.xxxxx"><img src="https://img.shields.io/badge/Paper-arXiv-b31b1b"></a>
+  <a href="https://huggingface.co/datasets/your-org/your-dataset"><img src="https://img.shields.io/badge/Dataset-HuggingFace-f0ad4e"></a>
+  <a href="https://huggingface.co/your-org/your-model"><img src="https://img.shields.io/badge/Model-HuggingFace-f0ad4e"></a>
+</p>
 
 ## Overview
 
-SFG-SwinSR is a Swin2SR-based super-resolution model for remote sensing imagery. The main architectural change is the replacement of the standard transformer feed-forward network with a **Spatial-Frequency Gated FFN (SFG-FFN)** designed to separate low-frequency structure from high-frequency residual detail and reinject useful detail through lightweight gating.
+SFG-SwinSR is a Swin2SR-based super-resolution model for remote sensing imagery. It replaces the standard transformer feed-forward network with a **Spatial-Frequency Gated FFN (SFG-FFN)** that separates low-frequency structural content from high-frequency residual detail and reinjects useful details through lightweight adaptive gating.
 
 This repository contains:
 
@@ -12,11 +41,7 @@ This repository contains:
 - training and evaluation scripts under `spacenet/`
 - ablation utilities under `ablations/`
 - release-safe README assets under `docs/images/`
-
-## Paper
-
-- arXiv: `Add your arXiv link here`
-- Resources: `arXiv link here` | `Hugging Face dataset/model link here`
+- placeholders for paper and Hugging Face resource links in the header badges
 
 ## Architecture
 
