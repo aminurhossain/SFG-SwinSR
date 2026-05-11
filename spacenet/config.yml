@@ -2,12 +2,12 @@ data:
   dataset_profile: sen2venus_2x
   profiles:
     sen2venus_2x:
-      dataset_root: path/to/your/sen2venus/2x/dataset
-      lr_subdir: 10m_test
-      hr_subdir: 05m_test
+      dataset_root: data/sen2vnus/b2b3b4b8
+      lr_subdir: 10m
+      hr_subdir: 05m
       lr_suffix: _10m.tif
       hr_suffix: _05m.tif
-      save_dir: path/to/your/save_dir/2x
+      save_dir: outputs/sen2venus/2x
       scale: 2
       num_channels: 4
       lr_crop_size: 128
@@ -25,12 +25,12 @@ data:
         lr_min:  [-848.0, -683.0, -692.0, -323.0]
         lr_max:  [19684.0, 17982.0, 17050.0, 15958.0]
     sen2venus_4x:
-      dataset_root: path/to/your/sen2venus/4x/dataset
-      lr_subdir: 20m_test
-      hr_subdir: 05m_test
+      dataset_root: data/sen2vnus/b5b6b7b8a
+      lr_subdir: 20m
+      hr_subdir: 05m
       lr_suffix: _20m.tif
       hr_suffix: _05m.tif
-      save_dir: path/to/your/save_dir/4x
+      save_dir: outputs/sen2venus/4x
       scale: 4
       num_channels: 4
       lr_crop_size: 64

@@ -22,10 +22,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from SFGSwinSR import MAGSwin2SR
 
-DEFAULT_LR_DIR = "path/to/your/lr_dir"
-DEFAULT_HR_DIR = "path/to/your/hr_dir"
+DEFAULT_LR_DIR = "data/spacenet/train_lr"
+DEFAULT_HR_DIR = "data/spacenet/train_hr"
 DEFAULT_CHECKPOINT = "path/to/your/checkpoint"
-DEFAULT_OUTPUT_DIR = "path/to/your/save_dir"
+DEFAULT_OUTPUT_DIR = "outputs/spacenet/evaluation"
 VALID_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 BIT_MAX = 2047.0
 SCALE = 2

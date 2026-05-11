@@ -135,6 +135,11 @@ The current repository is organized around experiments on:
 
 The `data/` directory in this repository contains sample files only for smoke testing and command-line verification. It is not the full training or evaluation dataset release.
 
+Original dataset sources:
+
+- SpaceNet Roads Dataset: https://spacenet.ai/spacenet-roads-dataset/
+- SEN2VENuS V2: https://zenodo.org/records/14603764
+
 Dataset paths, scale settings, crop sizes, and normalization statistics are defined in:
 
 - `spacenet/config.yml`
@@ -189,9 +194,9 @@ Evaluate:
 python spacenet/evaluation.py \
   --model-type mag \
   --checkpoint path/to/your/checkpoint.pt \
-  --lr-dir path/to/your/lr_dir \
-  --hr-dir path/to/your/hr_dir \
-  --output-dir path/to/your/output_dir
+  --lr-dir data/spacenet/train_lr \
+  --hr-dir data/spacenet/train_hr \
+  --output-dir outputs/spacenet/evaluation
 ```
 
 Train proposed SFG-SwinSR / MAGSwin2SR:
@@ -214,9 +219,9 @@ Evaluate:
 python "sen2venμs/evaluation.py" \
   --model-type mag \
   --checkpoint path/to/your/checkpoint.pt \
-  --lr-dir path/to/your/lr_dir \
-  --hr-dir path/to/your/hr_dir \
-  --output-dir path/to/your/output_dir
+  --lr-dir data/sen2vnus/b2b3b4b8/10m \
+  --hr-dir data/sen2vnus/b2b3b4b8/05m \
+  --output-dir outputs/sen2venus/evaluation
 ```
 
 ## Environment

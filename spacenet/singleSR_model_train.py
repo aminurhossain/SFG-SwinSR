@@ -40,8 +40,8 @@ CURRENT_DIR = Path(__file__).resolve().parent
 DATA_ROOT = os.path.join(CURRENT_DIR, "data")
 OUTPUTS_ROOT = os.path.join(CURRENT_DIR, "outputs")
 
-LR_DIR = "path/to/your/train_lr_dir"
-HR_DIR = "path/to/your/train_hr_dir"
+LR_DIR = "data/spacenet/train_lr"
+HR_DIR = "data/spacenet/train_hr"
 
 SAVE_DIR = os.path.join(OUTPUTS_ROOT, "checkpoints", "SFG_swinSR_test")
 os.makedirs(SAVE_DIR, exist_ok=True)
