@@ -16,6 +16,7 @@ This repository contains:
 ## Paper
 
 - arXiv: `Add your arXiv link here`
+- Resources: `arXiv link here` | `Hugging Face dataset/model link here`
 
 ## Architecture
 
@@ -152,7 +153,6 @@ Install these packages in your environment before running the training or evalua
 
 ## Release Notes
 
-- The paper workspace folder `SingleSR/` is intentionally ignored in `.gitignore`.
 - The figures shown in this README are copied into `docs/images/` so the repository can render them without tracking the full paper workspace.
 - Dataset locations and output directories remain local configuration items and should be updated before use.
 

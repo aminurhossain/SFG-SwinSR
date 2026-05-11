@@ -1,0 +1,10 @@
+torch>=1.10
+transformers>=4.37
+numpy
+rasterio
+kornia
+scikit-image
+PyYAML
+tqdm
+affine
+setproctitle
