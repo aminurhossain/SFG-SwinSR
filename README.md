@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <a href="https://arxiv.org/abs/xxxx.xxxxx"><img src="https://img.shields.io/badge/Paper-arXiv-b31b1b"></a>
+  <a href="https://arxiv.org/abs/2605.09687"><img src="https://img.shields.io/badge/Paper-arXiv-b31b1b"></a>
   <a href="https://huggingface.co/datasets/your-org/your-dataset"><img src="https://img.shields.io/badge/Dataset-HuggingFace-f0ad4e"></a>
   <a href="https://huggingface.co/your-org/your-model"><img src="https://img.shields.io/badge/Model-HuggingFace-f0ad4e"></a>
 </p>
