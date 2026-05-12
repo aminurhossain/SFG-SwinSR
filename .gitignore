@@ -7,7 +7,6 @@ venv/
 env/
 
 outputs/
-checkpoints/
 
 *.log
 *.aux
@@ -17,5 +16,3 @@ checkpoints/
 *.fls
 *.out
 *.synctex.gz
-
-SingleSR/
