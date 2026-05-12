@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">
-  SFG-SwinSR: Spatial-Frequency Gated Swin Transformer for Remote Sensing Single-Image Super-Resolution
+  Spatial-Frequency Gated Swin Transformer for Remote Sensing Single-Image Super-Resolution
 </h1>
 
 <p align="center">
