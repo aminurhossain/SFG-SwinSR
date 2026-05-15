@@ -110,10 +110,8 @@ SFG-SwinSR/
 |-- docs/
 |   `-- images/
 |-- spacenet/
-|   |-- train.py
 |   |-- evaluation.py
 |   |-- singleSR_model_train.py
-|   |-- config.yml
 |   |-- config.json
 |   `-- info.txt
 |-- sen2venμs/
@@ -142,7 +140,6 @@ Original dataset sources:
 
 Dataset paths, scale settings, crop sizes, and normalization statistics are defined in:
 
-- `spacenet/config.yml`
 - `spacenet/config.json`
 - `sen2venμs/config.yml`
 
