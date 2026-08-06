@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/architecture.png" alt="SFG-SwinSR overview" width="88%">
+  <img src="docs/images/SISR.final.png" alt="SFG-SwinSR overview" width="88%">
 </p>
 
 <h1 align="center">
