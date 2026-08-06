@@ -3,12 +3,12 @@
 </p>
 
 <h1 align="center">
-  Spatial-Frequency Gated Swin Transformer for Remote Sensing Single-Image Super-Resolution
+  Spatial-Frequency Gated Swin Transformer for
+Cross-Sensor Remote Sensing Super-Resolution
 </h1>
 
 <p align="center">
   Md Aminur Hossain,
-  Parekh Valkesh,
   Ayush V. Patel,
   Yogesh Jethani,
   Sanjay K. Singh,
