@@ -12,8 +12,8 @@ Cross-Sensor Remote Sensing Super-Resolution
 <p align="center">
   Md Aminur Hossain,
   Ayush V. Patel,
-  Yogesh Jethani,
   Sanjay K. Singh,
+  Yogesh Jethani,
   Biplab Banerjee
 </p>
 
@@ -22,7 +22,6 @@ Cross-Sensor Remote Sensing Super-Resolution
     Space Applications Centre, ISRO, Ahmedabad, India<br>
     Indian Institute of Technology Bombay, India<br>
     New L J Institute of Engineering and Technology, Ahmedabad, India<br>
-    Pandit Deendayal Energy University, Gandhinagar, India<br>
     GLS University, Ahmedabad, India
   </b>
 </p>
@@ -255,7 +254,7 @@ If you use this repository, cite the corresponding paper:
 ```bibtex
 @article{hossain2026sfgswinsr,
   title={Spatial-Frequency Gated Swin Transformer for Remote Sensing Single-Image Super-Resolution},
-  author={Hossain, Md Aminur and Valkesh, Parekh and Patel, Ayush V. and Jethani, Yogesh and Singh, Sanjay K. and Banerjee, Biplab},
+  author={Hossain, Md Aminur and and Patel, Ayush V. and and Singh, Sanjay K. and Jethani, Yogesh and Banerjee, Biplab},
   year={2026}
 }
 ```
