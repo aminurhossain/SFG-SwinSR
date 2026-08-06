@@ -8,6 +8,12 @@ Cross-Sensor Remote Sensing Super-Resolution
 </h1>
 
 <p align="center">
+  <strong>
+    Accepted at the <a href="https://terrabytes-workshop.github.io/">TerraBytes II Workshop, ECCV 2026</a>
+  </strong>
+</p>
+
+<p align="center">
   Md Aminur Hossain,
   Ayush V. Patel,
   Yogesh Jethani,
