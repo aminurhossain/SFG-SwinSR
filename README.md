@@ -10,40 +10,34 @@ Cross-Sensor Remote Sensing Super-Resolution
 </p>
 
 <p align="center">
-  Md Aminur Hossain,
-  Ayush V. Patel,
-  Sanjay K. Singh,
-  Yogesh Jethani,
-  Biplab Banerjee
+  Md Aminur Hossain<sup>1</sup>,
+  Ayush V. Patel<sup>2</sup>,
+  Sanjay K. Singh<sup>1</sup>,
+  Yogesh Jethani<sup>3</sup>,
+  Biplab Banerjee<sup>2</sup>
 </p>
 
 <p align="center">
-  <b>
-    Space Applications Centre, ISRO, Ahmedabad, India<br>
-    Indian Institute of Technology Bombay, India<br>
-    New L J Institute of Engineering and Technology, Ahmedabad, India<br>
-    GLS University, Ahmedabad, India
-  </b>
+  <sup>1</sup> Space Applications Centre, ISRO, Ahmedabad, India<br>
+  <sup>2</sup> Centre of Studies in Resources Engineering, Indian Institute of Technology Bombay, India<br>
+  <sup>3</sup> GLS University, Ahmedabad, India
 </p>
 
 <p align="center">
-  <a href="https://arxiv.org/abs/2605.09687"><img src="https://img.shields.io/badge/Paper-arXiv-b31b1b"></a>
-  <a href="https://huggingface.co/datasets/your-org/your-dataset"><img src="https://img.shields.io/badge/Dataset-HuggingFace-f0ad4e"></a>
-  <a href="https://huggingface.co/your-org/your-model"><img src="https://img.shields.io/badge/Model-HuggingFace-f0ad4e"></a>
+  <a href="https://arxiv.org/abs/2605.09687"><img src="https://img.shields.io/badge/Preprint-arXiv-b31b1b"></a>
 </p>
 
 ## Overview
 
-SFG-SwinSR is a Swin2SR-based super-resolution model for remote sensing imagery. It replaces the standard transformer feed-forward network with a **Spatial-Frequency Gated FFN (SFG-FFN)** that separates low-frequency structural content from high-frequency residual detail and reinjects useful details through lightweight adaptive gating.
+SFG-SwinSR is a Swin2SR-based model for cross-sensor remote sensing super-resolution. It replaces the standard transformer feed-forward network with a **Spatial-Frequency Gated FFN (SFG-FFN)** that estimates low-frequency feature content, derives residual details, and reinjects useful details through lightweight adaptive gating.
 
 This repository contains:
 
 - the released model implementation in `SFGSwinSR.py`
-- SpaceNet baseline Swin2SR training and evaluation scripts under `spacenet/`
+- SpaceNet training and evaluation scripts under `spacenet/`
 - training and evaluation scripts under `sen2venμs/`
 - ablation utilities under `ablations/`
 - release-safe README assets under `docs/images/`
-- placeholders for paper and Hugging Face resource links in the header badges
 
 ## Architecture
 
@@ -63,25 +57,33 @@ For SpaceNet, low-resolution inputs are synthetically generated from high-resolu
 
 ## Headline Results
 
-The following metrics are taken from the paper results currently included in the LaTeX sources under `SingleSR/`.
+The following metrics are taken from the final accepted paper.
 
 | Dataset | Model | Params (M) | PSNR (dB) | SSIM | MAE |
 |---|---|---:|---:|---:|---:|
-| SpaceNet | Swin2SR | 12.09 | 43.56 | 0.9780 | 0.0039 |
-| SpaceNet | Swin2-MoSE | 11.45 | 44.61 | 0.9816 | 0.0034 |
-| SpaceNet | **SFG-SwinSR** | **13.73** | **45.19** | **0.9852** | **0.0031** |
 | SEN2VENuS x2 | Swin2SR | 12.09 | 48.43 | 0.9932 | 0.0029 |
 | SEN2VENuS x2 | Swin2-MoSE | 11.45 | 48.97 | 0.9937 | 0.0026 |
-| SEN2VENuS x2 | **SFG-SwinSR** | **13.73** | **49.35** | **0.9949** | **0.0025** |
+| SEN2VENuS x2 | **SFG-SwinSR** | 13.73 | **49.35** | **0.9949** | **0.0025** |
 | SEN2VENuS x4 | Swin2SR | 12.09 | 44.12 | 0.9792 | 0.0049 |
 | SEN2VENuS x4 | Swin2-MoSE | 11.49 | 45.12 | 0.9806 | 0.0045 |
-| SEN2VENuS x4 | **SFG-SwinSR** | **13.73** | **45.52** | **0.9837** | **0.0042** |
+| SEN2VENuS x4 | **SFG-SwinSR** | 13.73 | **45.52** | **0.9837** | **0.0042** |
+| OLI2MSI x3 | Swin2SR | 12.09 | 45.32 | 0.9904 | 0.0039 |
+| OLI2MSI x3 | Swin2-MoSE | 11.45 | **45.94** | 0.9912 | 0.0035 |
+| OLI2MSI x3 | **SFG-SwinSR** | 13.73 | 45.91 | **0.9921** | **0.0032** |
+| SEN2NAIP x4 | Swin2SR | 12.09 | 35.91 | 0.9348 | 0.0094 |
+| SEN2NAIP x4 | Swin2-MoSE | 11.45 | 36.42 | 0.9397 | 0.0089 |
+| SEN2NAIP x4 | **SFG-SwinSR** | 13.73 | **36.95** | **0.9442** | **0.0083** |
+| SpaceNet x2 | Swin2SR | 12.09 | 43.56 | 0.9780 | 0.0039 |
+| SpaceNet x2 | Swin2-MoSE | 11.45 | 44.61 | 0.9816 | 0.0034 |
+| SpaceNet x2 | **SFG-SwinSR** | 13.73 | **45.19** | **0.9852** | **0.0031** |
 
 Key takeaways reported in the paper:
 
-- `+1.63 dB` PSNR over Swin2SR on SpaceNet
 - `+0.92 dB` PSNR over Swin2SR on SEN2VENuS x2
 - `+1.40 dB` PSNR over Swin2SR on SEN2VENuS x4
+- `+0.59 dB` PSNR over Swin2SR on OLI2MSI x3, while Swin2-MoSE remains `0.03 dB` higher
+- `+1.04 dB` PSNR over Swin2SR on SEN2NAIP x4
+- `+1.63 dB` PSNR over Swin2SR on SpaceNet x2
 
 ## Qualitative Results
 
@@ -113,24 +115,23 @@ SFG-SwinSR/
 |-- spacenet/
 |   |-- evaluation.py
 |   |-- singleSR_model_train.py
-|   |-- config.json
-|   `-- info.txt
+|   `-- config.json
 |-- sen2venμs/
 |   |-- train.py
 |   |-- evaluation.py
-|   |-- config.yml
-|   `-- info.txt
+|   `-- config.yml
 `-- ablations/
-    |-- ablation_runner.py
-    `-- info.txt
+    `-- ablation_runner.py
 ```
 
 ## Datasets and Configuration
 
 The current repository is organized around experiments on:
 
-- SpaceNet / WorldView-2
+- SpaceNet Challenge 3 / WorldView-3
 - SEN2VENuS
+
+The final paper additionally reports results on OLI2MSI and SEN2NAIP. This repository currently provides runnable training configurations and sample data for SpaceNet and SEN2VENuS.
 
 The `data/` directory in this repository contains sample files only for smoke testing and command-line verification. It is not the full training or evaluation dataset release.
 
@@ -160,10 +161,6 @@ Contains:
 - the modified Swin2SR layer forward path
 - the `MAGSwin2SR` wrapper used by the project
 
-### `spacenet/train.py`
-
-Configuration-driven training entrypoint for the baseline `Swin2SR` model on SpaceNet.
-
 ### `spacenet/evaluation.py`
 
 Evaluation script for metrics and super-resolved image export.
@@ -171,6 +168,10 @@ Evaluation script for metrics and super-resolved image export.
 ### `spacenet/singleSR_model_train.py`
 
 Training script for the proposed `MAGSwin2SR` / `SFG-SwinSR` model with directly embedded local constants.
+
+### `sen2venμs/train.py`
+
+Configuration-driven training entrypoint for the SEN2VENuS x2 and x4 profiles.
 
 ### `ablations/ablation_runner.py`
 
@@ -180,10 +181,10 @@ Runner for backbone and loss ablation experiments.
 
 ### SpaceNet
 
-Train baseline Swin2SR:
+Train SFG-SwinSR:
 
 ```bash
-python spacenet/train.py --config spacenet/config.yml
+python spacenet/singleSR_model_train.py
 ```
 
 Evaluate:
@@ -195,12 +196,6 @@ python spacenet/evaluation.py \
   --lr-dir data/spacenet/train_lr \
   --hr-dir data/spacenet/train_hr \
   --output-dir outputs/spacenet/evaluation
-```
-
-Train proposed SFG-SwinSR / MAGSwin2SR:
-
-```bash
-python spacenet/singleSR_model_train.py
 ```
 
 ### SEN2VENuS
@@ -251,10 +246,14 @@ pip install -r requirements.txt
 
 If you use this repository, cite the corresponding paper:
 
+The arXiv record currently contains an earlier preprint. The citation below reflects the accepted final paper:
+
 ```bibtex
-@article{hossain2026sfgswinsr,
-  title={Spatial-Frequency Gated Swin Transformer for Remote Sensing Single-Image Super-Resolution},
-  author={Hossain, Md Aminur and and Patel, Ayush V. and and Singh, Sanjay K. and Jethani, Yogesh and Banerjee, Biplab},
-  year={2026}
+@misc{hossain2026sfgswinsr,
+  title={Spatial-Frequency Gated Swin Transformer for Cross-Sensor Remote Sensing Super-Resolution},
+  author={Hossain, Md Aminur and Patel, Ayush V. and Singh, Sanjay K. and Jethani, Yogesh and Banerjee, Biplab},
+  year={2026},
+  note={Accepted at the TerraBytes II Workshop, ECCV 2026},
+  url={https://arxiv.org/abs/2605.09687}
 }
 ```
